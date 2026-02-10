@@ -2,6 +2,7 @@
 #include "globalvar.hpp"
 #include "locale_detect.hpp"
 #include "string_utils.hpp"
+#include "pcre2_regex.hpp"
 #include <filesystem>
 #include <regex>
 #include <cassert>
@@ -160,12 +161,12 @@ void add_subst_entry(
     assert(connection != nullptr && "No active database connection");
 
     // Validate match pattern
-    try { std::regex(match_pattern); }
+    try { pcre2_regex::validate_pattern(match_pattern); }
     catch (...) { throw std::runtime_error("Uncaught bad match pattern"); }
 
     // If is_regex, test substitution
     if (is_regex) {
-        try { std::regex_replace(std::string(""), std::regex(match_pattern), substitute_pattern); }
+        try { pcre2_regex::validate_substitution(match_pattern, substitute_pattern); }
         catch (const std::exception& e) { throw bad_pattern(e.what()); }
     }
 

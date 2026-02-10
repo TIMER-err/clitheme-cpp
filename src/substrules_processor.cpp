@@ -2,6 +2,7 @@
 #include "db_interface.hpp"
 #include "globalvar.hpp"
 #include "string_utils.hpp"
+#include "pcre2_regex.hpp"
 #include <regex>
 #include <vector>
 #include <set>
@@ -82,16 +83,14 @@ std::pair<std::string, std::set<int>> match_content(
             }
 
             try {
-                std::regex match_re(rule.match_pattern, std::regex::multiline);
-                // Search within the line range
-                std::string line_content = match_str.substr(cur_start, length);
+                // Use PCRE2 for matching within the line range
+                auto pcre_matches = pcre2_regex::finditer(
+                    rule.match_pattern, match_str, cur_start, cur_start + length);
 
-                auto match_begin = std::sregex_iterator(line_content.begin(), line_content.end(), match_re);
-                auto match_end = std::sregex_iterator();
-
-                for (auto it = match_begin; it != match_end; ++it) {
-                    size_t abs_start = cur_start + it->position();
-                    size_t abs_end = abs_start + it->length();
+                for (const auto& pm : pcre_matches) {
+                    size_t abs_start = pm.start;
+                    size_t abs_end = pm.end;
+                    size_t match_len = abs_end - abs_start;
 
                     // Check endmatchhere: find line boundaries
                     size_t line_start = abs_start;
@@ -133,15 +132,15 @@ std::pair<std::string, std::set<int>> match_content(
                     // Perform substitution
                     std::string new_str;
                     if (rule.is_regex) {
-                        new_str = it->format(rule.substitute_pattern);
+                        new_str = pcre2_regex::expand_replacement(rule.substitute_pattern, pm);
                     } else {
                         new_str = rule.substitute_pattern;
                     }
 
                     size_t pos_in_new = abs_start + offset;
                     new_content = new_content.substr(0, pos_in_new) + new_str +
-                                  new_content.substr(pos_in_new + it->length());
-                    offset += static_cast<int>(new_str.size()) - static_cast<int>(it->length());
+                                  new_content.substr(pos_in_new + match_len);
+                    offset += static_cast<int>(new_str.size()) - static_cast<int>(match_len);
 
                     // Update condition map
                     uint8_t mark = rule.end_match_here ? 0x02 : 0x01;
@@ -149,13 +148,13 @@ std::pair<std::string, std::set<int>> match_content(
                     size_t cm_pos = abs_start + new_condition_map_offset;
                     new_condition_map.erase(
                         new_condition_map.begin() + cm_pos,
-                        new_condition_map.begin() + cm_pos + it->length());
+                        new_condition_map.begin() + cm_pos + match_len);
                     new_condition_map.insert(
                         new_condition_map.begin() + cm_pos,
                         sub_map.begin(), sub_map.end());
-                    new_condition_map_offset += static_cast<int>(new_str.size()) - static_cast<int>(it->length());
+                    new_condition_map_offset += static_cast<int>(new_str.size()) - static_cast<int>(match_len);
                 }
-            } catch (const std::regex_error&) {
+            } catch (const pcre2_regex::regex_error&) {
                 // Skip invalid patterns
             }
 

@@ -3,6 +3,7 @@
 #include "string_utils.hpp"
 #include "sanity_check.hpp"
 #include "db_interface.hpp"
+#include "pcre2_regex.hpp"
 #include <regex>
 #include <set>
 #include <cassert>
@@ -32,8 +33,8 @@ void GeneratorObject::handle_entry(const std::string& start_phrase, const std::s
 
     auto check_entry_name = [&](const std::string& name) -> bool {
         if (is_substrules) {
-            try { std::regex re(name); }
-            catch (const std::regex_error& e) {
+            try { pcre2_regex::validate_pattern(name); }
+            catch (const pcre2_regex::regex_error& e) {
                 handle_error("Line " + std::to_string(linenum()) + ": Bad match pattern (" +
                             string_utils::make_printable(e.what()) + ")");
                 return false;

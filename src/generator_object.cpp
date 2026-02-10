@@ -354,8 +354,9 @@ std::string GeneratorObject::handle_subst(const std::string& content,
         new_content = result;
     }
 
-    // substesc warning
-    if (!silence_warnings && !do_esc && warnings.find("substesc") == warnings.end()) {
+    // substesc warning - only warn when substesc is not globally enabled
+    // (do_esc may be false because pure_name context intentionally disables it, e.g. setvar)
+    if (!silence_warnings && !options::opt_is_true(global_options, "substesc") && !do_esc && warnings.find("substesc") == warnings.end()) {
         if (new_content.find("{{ESC}}") != std::string::npos) {
             handle_warning("Line " + ln_debug + ": Attempted to use \"{{ESC}}\", but \"substesc\" option is not enabled");
         }
@@ -366,8 +367,8 @@ std::string GeneratorObject::handle_subst(const std::string& content,
         new_content = string_utils::replace_all(new_content, "{{ESC}}", "\x1b");
     }
 
-    // substchar warning
-    if (!silence_warnings && !do_chars && warnings.find("substchar") == warnings.end()) {
+    // substchar warning - only warn when substchar is not globally enabled
+    if (!silence_warnings && !options::opt_is_true(global_options, "substchar") && !do_chars && warnings.find("substchar") == warnings.end()) {
         if (std::regex_search(new_content, substchar_re)) {
             handle_warning("Line " + ln_debug + ": Attempted to use character substitution, but \"substchar\" option is not enabled");
         }
