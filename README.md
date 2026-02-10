@@ -1,6 +1,6 @@
 # clitheme-cpp
 
-CLItheme 的 C++ 实现，提供主题定义文件 (`.ctdef.txt`) 的解析/生成器和管道替换过滤器。
+CLItheme 的 C++ 实现，提供主题定义文件 (`.ctdef.txt`) 的解析/生成器和 exec 模式输出替换。
 
 ## 依赖
 
@@ -8,17 +8,18 @@ CLItheme 的 C++ 实现，提供主题定义文件 (`.ctdef.txt`) 的解析/生�
 - CMake 3.14+
 - SQLite3
 - zlib
+- PCRE2
 
 ### Arch Linux
 
 ```bash
-sudo pacman -S cmake sqlite zlib
+sudo pacman -S cmake sqlite zlib pcre2
 ```
 
 ### Debian/Ubuntu
 
 ```bash
-sudo apt install cmake libsqlite3-dev zlib1g-dev
+sudo apt install cmake libsqlite3-dev zlib1g-dev libpcre2-dev
 ```
 
 ## 构建
@@ -30,6 +31,14 @@ make -j$(nproc)
 ```
 
 构建产物为 `build/clitheme-cpp`。
+
+## 安装
+
+```bash
+cmake --install build
+```
+
+二进制文件将安装到 `~/.local/share/clitheme/`。
 
 ## 使用方式
 
@@ -80,34 +89,39 @@ output/
 └── subst-data.db          # 仅当定义文件含 {substrules} 时
 ```
 
-### 2. filter 模式
+### 2. exec 模式
 
-从 stdin 读取文本，根据数据库中的替换规则进行匹配和替换，输出到 stdout。
+通过 PTY 执行子进程，捕获 stdout 和 stderr，根据数据库中的替换规则进行实时匹配和替换。
 
 ```bash
-clitheme-cpp filter [options]
+clitheme-cpp exec [options] <command> [args...]
 ```
 
 **选项：**
 
 | 选项 | 说明 |
 |---|---|
-| `--command <cmd>` | 模拟的命令名（用于命令过滤） |
-| `--stderr` | 标记输入为 stderr |
 | `--db-path <path>` | 数据库路径（默认 `~/.local/share/clitheme/subst-data.db`） |
 
 **示例：**
 
 ```bash
-# 基本替换
-echo "hello world" | clitheme-cpp filter --db-path ./subst-data.db
+# 在 exec 模式下运行命令
+clitheme-cpp exec --db-path ./output/subst-data.db ls -la
 
-# 按命令过滤
-echo "test output" | clitheme-cpp filter --db-path ./subst-data.db --command echo
+# 运行交互式 shell
+clitheme-cpp exec --db-path ./output/subst-data.db fish
 
-# 管道链式使用
-some_command | clitheme-cpp filter --command some_command
+# 使用默认数据库路径
+clitheme-cpp exec some_command --arg1 --arg2
 ```
+
+**特性：**
+
+- 通过 PTY 同时捕获 stdout 和 stderr
+- 支持交互式程序（终端 raw 模式）
+- 正确转发信号（Ctrl+C、Ctrl+Z、窗口大小调整）
+- 保留子进程退出码
 
 ## 数据库 Schema
 
@@ -135,7 +149,7 @@ CREATE TABLE clitheme_subst_data (
 
 ```
 src/
-├── main.cpp                     # 入口：dispatch generate/filter 子命令
+├── main.cpp                     # 入口：dispatch generate/exec 子命令
 ├── globalvar.hpp/cpp             # 全局常量（路径名、DB 表名、版本号等）
 ├── string_utils.hpp              # 字符串工具函数
 ├── sanity_check.hpp/cpp          # 路径合法性检查
@@ -149,7 +163,8 @@ src/
 ├── section_entries.hpp/cpp       # {entries} section 处理
 ├── section_substrules.hpp/cpp    # {substrules} section 处理
 ├── section_manpages.hpp/cpp      # {manpages} section 处理
-└── substrules_processor.hpp/cpp  # 替换规则匹配引擎（filter 模式核心）
+├── exec_handler.hpp/cpp         # exec 模式：PTY fork/exec 和 I/O 转发
+└── substrules_processor.hpp/cpp  # 替换规则匹配引擎
 ```
 
 ## 与 Python 版本的差异
@@ -158,8 +173,8 @@ src/
 |---|---|---|
 | 错误消息 | 支持国际化（FetchDescriptor） | 硬编码英文 |
 | UUID 生成 | `hashlib.shake_128` 确定性 | `std::random_device` 随机 UUID v4 |
-| 正则引擎 | Python `re` | `std::regex` (ECMAScript) |
-| 替换语法 | `\g<1>`、`\g<name>` | `$1`（ECMAScript 标准） |
+| 正则引擎 | Python `re` | PCRE2 |
+| 执行模式 | `clitheme-exec` | `clitheme-cpp exec` |
 
 ## License
 

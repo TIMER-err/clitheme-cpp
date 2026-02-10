@@ -6,6 +6,7 @@
 #include "section_manpages.hpp"
 #include "db_interface.hpp"
 #include "substrules_processor.hpp"
+#include "exec_handler.hpp"
 #include "string_utils.hpp"
 #include <iostream>
 #include <fstream>
@@ -21,14 +22,12 @@ namespace fs = std::filesystem;
 static void print_usage() {
     std::cerr << "Usage:\n"
               << "  clitheme-cpp generate <file> [options]\n"
-              << "  clitheme-cpp filter [options]\n"
+              << "  clitheme-cpp exec [options] <command> [args...]\n"
               << "\nGenerate options:\n"
               << "  --output-path <path>    Output directory (default: auto-generated temp dir)\n"
               << "  --overlay               Overlay mode\n"
               << "  --infofile-name <name>  Theme info subdirectory name (default: \"1\")\n"
-              << "\nFilter options:\n"
-              << "  --command <cmd>         Simulated command name for filtering\n"
-              << "  --stderr                Mark input as stderr\n"
+              << "\nExec options:\n"
               << "  --db-path <path>        Database path (default: ~/.local/share/clitheme/subst-data.db)\n";
 }
 
@@ -212,40 +211,55 @@ static int cmd_generate(int argc, char* argv[]) {
     return 1;
 }
 
-static int cmd_filter(int argc, char* argv[]) {
-    std::optional<std::string> command;
-    bool is_stderr = false;
+static int cmd_exec(int argc, char* argv[]) {
     std::string db_path;
+    int cmd_start = -1;
 
     for (int i = 2; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "--command" && i + 1 < argc) {
-            command = argv[++i];
-        } else if (arg == "--stderr") {
-            is_stderr = true;
-        } else if (arg == "--db-path" && i + 1 < argc) {
+        if (arg == "--db-path" && i + 1 < argc) {
             db_path = argv[++i];
-        } else {
+        } else if (arg[0] == '-') {
             std::cerr << "Unknown option: " << arg << "\n";
             return 1;
+        } else {
+            cmd_start = i;
+            break;
         }
+    }
+
+    if (cmd_start < 0) {
+        std::cerr << "Error: missing command argument\n";
+        print_usage();
+        return 1;
     }
 
     if (!db_path.empty()) {
         clitheme::db_interface::set_db_path(db_path);
     }
 
-    // Read all stdin
-    std::string input((std::istreambuf_iterator<char>(std::cin)),
-                       std::istreambuf_iterator<char>());
-
-    if (input.empty()) {
-        return 0;
+    try {
+        clitheme::db_interface::connect_db();
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        return 1;
     }
 
-    auto [output, changed_lines] = clitheme::substrules_processor::match_content(input, command, is_stderr);
-    std::cout << output;
-    return 0;
+    std::vector<std::string> command_argv;
+    for (int i = cmd_start; i < argc; i++) {
+        command_argv.push_back(argv[i]);
+    }
+
+    try {
+        clitheme::ExecHandler handler(command_argv);
+        int exit_code = handler.run();
+        clitheme::db_interface::close_db();
+        return exit_code;
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        clitheme::db_interface::close_db();
+        return 1;
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -257,8 +271,8 @@ int main(int argc, char* argv[]) {
     std::string subcommand = argv[1];
     if (subcommand == "generate") {
         return cmd_generate(argc, argv);
-    } else if (subcommand == "filter") {
-        return cmd_filter(argc, argv);
+    } else if (subcommand == "exec") {
+        return cmd_exec(argc, argv);
     } else if (subcommand == "--help" || subcommand == "-h") {
         print_usage();
         return 0;
