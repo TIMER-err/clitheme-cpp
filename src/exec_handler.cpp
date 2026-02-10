@@ -181,7 +181,7 @@ void ExecHandler::handle_sigcont(int) {
 int ExecHandler::run() {
     std::string output_buffer;
     auto last_data_time = std::chrono::steady_clock::now();
-    const auto flush_timeout = std::chrono::milliseconds(100);
+    const auto flush_timeout = std::chrono::milliseconds(5);
 
     while (true) {
         struct pollfd fds[2];
@@ -199,7 +199,7 @@ int ExecHandler::run() {
             nfds++;
         }
 
-        int poll_timeout = output_buffer.empty() ? -1 : 100;
+        int poll_timeout = output_buffer.empty() ? -1 : 5;
         int ret = poll(fds, nfds, poll_timeout);
 
         if (ret == -1) {
