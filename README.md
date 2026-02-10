@@ -123,6 +123,56 @@ clitheme-cpp exec some_command --arg1 --arg2
 - 正确转发信号（Ctrl+C、Ctrl+Z、窗口大小调整）
 - 保留子进程退出码
 
+### 为Fish Shell配置
+
+将以下内容添加到 `~/.config/fish/config.fish` 的末尾：
+
+```fish
+set -g commands_to_ignore \
+    cd pushd popd exit \
+    vim nvim nano emacs \
+    less more man cat \
+    top htop btop \
+    fg bg jobs disown \
+    clear \
+    sudo su ssh fish
+
+function transform_output_on_enter
+    set -l original_command (commandline)
+
+    if test -z "$original_command"
+        commandline -f execute
+        return
+    end
+
+    set -l first_word (string split ' ' -- $original_command)[1]
+
+    if contains -- $first_word $commands_to_ignore
+        commandline -f execute
+    else
+        set -l hist_file ~/.local/share/fish/fish_history
+        set -l now (date +%s)
+        echo "- cmd: $original_command" >> $hist_file
+        echo "  when: $now" >> $hist_file
+        history --merge
+
+        echo ''
+        eval ~/.local/share/clitheme/clitheme-cpp exec "$original_command"
+        set -l go_back_prev_line 'printf "\e[1A"'
+        commandline -r $go_back_prev_line
+        commandline -f execute
+
+        history delete --exact --case-sensitive -- "$go_back_prev_line"
+    end
+end
+
+bind \r transform_output_on_enter
+```
+> [!IMPORTANT]
+> 此配置默认数据库文件位于~/.local/share/clitheme/subst-data.db
+
+如果你使用其他shell，需要自行编写配置
+
 ## 数据库 Schema
 
 与 Python 版本完全兼容（版本 8）：
